@@ -1,17 +1,20 @@
 <Project>
   <PropertyGroup>
+    <!-- Build Settings -->
     <LangVersion>preview</LangVersion>
-    <ImplicitUsings>disable</ImplicitUsings>
+    <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.0.6</Version>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+
+    <!-- Package Metadata -->
+    <Version>1.1.0</Version>
     <Authors>iyulab</Authors>
     <Company>Iyulab Corporation</Company>
-    <Owners>iyulab-rnd</Owners>
-    <Copyright>Copyright (c) Iyulab Corporation 2024.</Copyright>
-    <PackageProjectUrl>https://github.com/iyulab-rnd/ObjectPath</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/iyulab-rnd/ObjectPath.git</RepositoryUrl>
+    <Owners>iyulab</Owners>
+    <Copyright>Copyright (c) Iyulab Corporation 2024-2025.</Copyright>
+    <PackageProjectUrl>https://github.com/iyulab/ObjectPath</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/iyulab/ObjectPath.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageIconUrl>https://raw.githubusercontent.com/iyulab-rnd/public/main/images/iyulab_128.png</PackageIconUrl>
     <PackageTags>ObjectPath</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>

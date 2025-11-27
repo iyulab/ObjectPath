@@ -1,12 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Nullable>enable</Nullable>
-    <TargetFrameworks>net5.0;net6.0;net7.0;net8.0</TargetFrameworks>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <Title>ObjectPath</Title>    
-    <Description>A simple and intuitive library for accessing object values using string path expressions in .NET.</Description>    
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <Title>ObjectPath</Title>
+    <Description>A simple and intuitive library for accessing object values using string path expressions in .NET.</Description>
     <RootNamespace>ObjectPathLibrary</RootNamespace>
   </PropertyGroup>
 
