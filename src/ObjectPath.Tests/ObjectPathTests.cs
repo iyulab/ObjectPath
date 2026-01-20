@@ -964,7 +964,7 @@ namespace ObjectPathLibrary.Tests
 
             // Assert
             Assert.Equal("John", name);
-            Assert.Equal(30m, age);
+            Assert.Equal(30, age);  // Changed from 30m to 30 (int) - JSON integers now return int
             Assert.Equal("New York", city);
             Assert.Equal("123 Main St", street);
             Assert.Equal("home", phoneType1);
@@ -1729,6 +1729,204 @@ namespace ObjectPathLibrary.Tests
             public string Name { get; set; } = "";
             public CircularRefClass? Parent { get; set; }
             public CircularRefClass? Child { get; set; }
+        }
+    }
+
+    #endregion
+
+    #region Phase 4: Bug Fixes and Improvements Tests
+
+    public class BugFixTests
+    {
+        [Fact]
+        public void TryGetValue_ReturnsTrue_WhenPathReturnsNullValue()
+        {
+            // Arrange - object with a null property value
+            var obj = new { Address = (string?)null };
+
+            // Act
+            var result = ObjectPath.TryGetValue(obj, "Address", out var value);
+
+            // Assert - should return true because path is valid, even though value is null
+            Assert.True(result);
+            Assert.Null(value);
+        }
+
+        [Fact]
+        public void TryGetValueT_ReturnsTrue_WhenPathReturnsNullValue()
+        {
+            // Arrange
+            var obj = new { Name = (string?)null };
+
+            // Act
+            var result = ObjectPath.TryGetValue<string>(obj, "Name", out var value);
+
+            // Assert
+            Assert.True(result);
+            Assert.Null(value);
+        }
+    }
+
+    public class JsonNumberTypeTests
+    {
+        [Fact]
+        public void GetValue_ReturnsInt_ForJsonInteger()
+        {
+            // Arrange
+            var json = """{"value": 42}""";
+            var doc = JsonDocument.Parse(json);
+
+            // Act
+            var value = ObjectPath.GetValue(doc.RootElement, "value");
+
+            // Assert
+            Assert.IsType<int>(value);
+            Assert.Equal(42, value);
+        }
+
+        [Fact]
+        public void GetValue_ReturnsLong_ForLargeJsonInteger()
+        {
+            // Arrange
+            var json = """{"value": 9223372036854775807}""";
+            var doc = JsonDocument.Parse(json);
+
+            // Act
+            var value = ObjectPath.GetValue(doc.RootElement, "value");
+
+            // Assert
+            Assert.IsType<long>(value);
+            Assert.Equal(9223372036854775807L, value);
+        }
+
+        [Fact]
+        public void GetValue_ReturnsDouble_ForJsonFloat()
+        {
+            // Arrange
+            var json = """{"value": 3.14159}""";
+            var doc = JsonDocument.Parse(json);
+
+            // Act
+            var value = ObjectPath.GetValue(doc.RootElement, "value");
+
+            // Assert
+            Assert.IsType<double>(value);
+            Assert.Equal(3.14159, value);
+        }
+    }
+
+    public class EnhancedTypeConversionTests
+    {
+        [Fact]
+        public void GetValueT_ConvertsStringToEnum()
+        {
+            // Arrange
+            var obj = new { Day = "Monday" };
+
+            // Act
+            var day = ObjectPath.GetValue<DayOfWeek>(obj, "Day");
+
+            // Assert
+            Assert.Equal(DayOfWeek.Monday, day);
+        }
+
+        [Fact]
+        public void GetValueT_ConvertsIntToEnum()
+        {
+            // Arrange
+            var obj = new { Day = 1 };  // Monday = 1
+
+            // Act
+            var day = ObjectPath.GetValue<DayOfWeek>(obj, "Day");
+
+            // Assert
+            Assert.Equal(DayOfWeek.Monday, day);
+        }
+
+        [Fact]
+        public void GetValueT_ConvertsStringToGuid()
+        {
+            // Arrange
+            var guidStr = "12345678-1234-1234-1234-123456789012";
+            var obj = new { Id = guidStr };
+
+            // Act
+            var guid = ObjectPath.GetValue<Guid>(obj, "Id");
+
+            // Assert
+            Assert.Equal(Guid.Parse(guidStr), guid);
+        }
+
+        [Fact]
+        public void GetValueT_ConvertsToNullableInt()
+        {
+            // Arrange
+            var obj = new { Value = 42 };
+
+            // Act
+            var value = ObjectPath.GetValue<int?>(obj, "Value");
+
+            // Assert
+            Assert.Equal(42, value);
+        }
+
+        [Fact]
+        public void TryGetValueT_ReturnsFalse_ForInvalidEnumString()
+        {
+            // Arrange
+            var obj = new { Day = "InvalidDay" };
+
+            // Act
+            var result = ObjectPath.TryGetValue<DayOfWeek>(obj, "Day", out var value);
+
+            // Assert
+            Assert.False(result);
+            Assert.Equal(default, value);
+        }
+
+        [Fact]
+        public void TryGetValueT_ReturnsFalse_ForInvalidGuidString()
+        {
+            // Arrange
+            var obj = new { Id = "not-a-guid" };
+
+            // Act
+            var result = ObjectPath.TryGetValue<Guid>(obj, "Id", out var value);
+
+            // Assert
+            Assert.False(result);
+            Assert.Equal(default, value);
+        }
+    }
+
+    public class ExceptionMessageTests
+    {
+        [Fact]
+        public void InvalidPath_ExceptionIncludesFullPath_ForJsonElement()
+        {
+            // Arrange
+            var json = """{"user": {"name": "John"}}""";
+            var doc = JsonDocument.Parse(json);
+
+            // Act & Assert
+            var ex = Assert.Throws<InvalidObjectPathException>(() =>
+                ObjectPath.GetValue(doc.RootElement, "user.email"));
+
+            Assert.Contains("user.email", ex.Message);
+        }
+
+        [Fact]
+        public void InvalidArrayIndex_ExceptionIncludesFullPath_ForJsonElement()
+        {
+            // Arrange
+            var json = """{"items": [1, 2, 3]}""";
+            var doc = JsonDocument.Parse(json);
+
+            // Act & Assert
+            var ex = Assert.Throws<InvalidObjectPathException>(() =>
+                ObjectPath.GetValue(doc.RootElement, "items[10]"));
+
+            Assert.Contains("items[10]", ex.Message);
         }
     }
 

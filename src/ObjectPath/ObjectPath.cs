@@ -29,7 +29,7 @@ namespace ObjectPathLibrary
                 {
                     if (obj is JsonElement jsonElement)
                     {
-                        obj = HandleJsonElement(jsonElement, currentSegment, segments, ref index, ignoreCase);
+                        obj = HandleJsonElement(jsonElement, currentSegment, segments, ref index, ignoreCase, path);
                     }
                     else if (int.TryParse(currentSegment, out var arrayIndex))
                     {
@@ -61,10 +61,16 @@ namespace ObjectPathLibrary
         /// <returns>true if the value was found; otherwise, false.</returns>
         public static bool TryGetValue(object? obj, string path, out object? value, bool ignoreCase = true)
         {
+            if (obj == null)
+            {
+                value = null;
+                return false;
+            }
+
             try
             {
                 value = GetValue(obj, path, ignoreCase);
-                return obj != null;
+                return true;
             }
             catch (InvalidObjectPathException)
             {
@@ -85,7 +91,7 @@ namespace ObjectPathLibrary
         public static T? GetValue<T>(object? obj, string path, bool ignoreCase = true)
         {
             var value = GetValue(obj, path, ignoreCase);
-            
+
             if (value == null)
             {
                 return default;
@@ -99,10 +105,35 @@ namespace ObjectPathLibrary
                     return typedValue;
                 }
 
+                var targetType = typeof(T);
+
+                // Handle Nullable<T> types
+                var underlyingType = Nullable.GetUnderlyingType(targetType);
+                if (underlyingType != null)
+                {
+                    targetType = underlyingType;
+                }
+
+                // Handle Enum conversion from string or number
+                if (targetType.IsEnum)
+                {
+                    if (value is string strValue)
+                    {
+                        return (T)Enum.Parse(targetType, strValue, ignoreCase);
+                    }
+                    return (T)Enum.ToObject(targetType, value);
+                }
+
+                // Handle Guid conversion
+                if (targetType == typeof(Guid) && value is string guidStr)
+                {
+                    return (T)(object)Guid.Parse(guidStr);
+                }
+
                 // Try Convert for compatible types
-                return (T)Convert.ChangeType(value, typeof(T));
+                return (T)Convert.ChangeType(value, targetType);
             }
-            catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+            catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException or ArgumentException)
             {
                 throw new InvalidObjectPathException(
                     $"Cannot convert value of type '{value.GetType().Name}' to '{typeof(T).Name}' at path '{path}'.", ex);
@@ -120,10 +151,16 @@ namespace ObjectPathLibrary
         /// <returns>true if the value was found and successfully converted; otherwise, false.</returns>
         public static bool TryGetValue<T>(object? obj, string path, out T? value, bool ignoreCase = true)
         {
+            if (obj == null)
+            {
+                value = default;
+                return false;
+            }
+
             try
             {
                 value = GetValue<T>(obj, path, ignoreCase);
-                return obj != null;
+                return true;
             }
             catch (InvalidObjectPathException)
             {
@@ -132,7 +169,7 @@ namespace ObjectPathLibrary
             }
         }
 
-        private static object? HandleJsonElement(JsonElement jsonElement, string currentSegment, string[] segments, ref int index, bool ignoreCase)
+        private static object? HandleJsonElement(JsonElement jsonElement, string currentSegment, string[] segments, ref int index, bool ignoreCase, string fullPath)
         {
             if (jsonElement.ValueKind == JsonValueKind.Object)
             {
@@ -143,13 +180,20 @@ namespace ObjectPathLibrary
                 }
                 else
                 {
-                    throw new InvalidObjectPathException($"Property '{currentSegment}' not found.");
+                    throw new InvalidObjectPathException($"Property '{currentSegment}' not found in path '{fullPath}'.");
                 }
             }
-            else if (jsonElement.ValueKind == JsonValueKind.Array && int.TryParse(currentSegment, out var jsonArrayIndex) &&
-                     jsonArrayIndex >= 0 && jsonArrayIndex < jsonElement.GetArrayLength())
+            else if (jsonElement.ValueKind == JsonValueKind.Array)
             {
-                return GetJsonElementValue(jsonElement[jsonArrayIndex]);
+                if (int.TryParse(currentSegment, out var jsonArrayIndex) &&
+                    jsonArrayIndex >= 0 && jsonArrayIndex < jsonElement.GetArrayLength())
+                {
+                    return GetJsonElementValue(jsonElement[jsonArrayIndex]);
+                }
+                else
+                {
+                    throw new InvalidObjectPathException($"Invalid array index '{currentSegment}' in path '{fullPath}'.");
+                }
             }
             else if (index == segments.Length - 1)
             {
@@ -157,7 +201,7 @@ namespace ObjectPathLibrary
             }
             else
             {
-                throw new InvalidObjectPathException($"Invalid array index '{currentSegment}'.");
+                throw new InvalidObjectPathException($"Cannot access '{currentSegment}' on non-object/non-array JSON element in path '{fullPath}'.");
             }
         }
 
@@ -337,12 +381,35 @@ namespace ObjectPathLibrary
             return jsonElement.ValueKind switch
             {
                 JsonValueKind.String => jsonElement.GetString(),
-                JsonValueKind.Number => jsonElement.GetDecimal(),
+                JsonValueKind.Number => GetJsonNumber(jsonElement),
                 JsonValueKind.True => true,
                 JsonValueKind.False => false,
                 JsonValueKind.Null => null,
                 _ => jsonElement
             };
+        }
+
+        private static object GetJsonNumber(JsonElement jsonElement)
+        {
+            // Try integer types first (more common and precise)
+            if (jsonElement.TryGetInt64(out var longValue))
+            {
+                // Return int if it fits, otherwise long
+                if (longValue >= int.MinValue && longValue <= int.MaxValue)
+                {
+                    return (int)longValue;
+                }
+                return longValue;
+            }
+
+            // Fall back to double for floating-point numbers
+            if (jsonElement.TryGetDouble(out var doubleValue))
+            {
+                return doubleValue;
+            }
+
+            // Last resort: decimal for very large/precise numbers
+            return jsonElement.GetDecimal();
         }
     }
 }

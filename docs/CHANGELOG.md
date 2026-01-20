@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-01-20
+
+### Added
+
+- **Enhanced type conversion**: Support for `Enum`, `Guid`, and `Nullable<T>` types in `GetValue<T>()`
+- **Smarter JSON number handling**: JSON integers return `int`/`long`, floats return `double` (previously all returned `decimal`)
+- **XML documentation**: Added comprehensive XML docs to `ToExpando()` method
+- **New tests**: 13 additional test cases for bug fixes and improvements (108 total)
+
+### Fixed
+
+- **TryGetValue return logic**: Now correctly returns `true` for valid paths even when the value is `null`
+- **Exception message consistency**: All exceptions now include the full path for easier debugging
+- **JSON array bounds checking**: Proper exception thrown for out-of-bounds array access in JSON
+
 ## [1.2.0] - 2024-11-27
 
 ### Added
