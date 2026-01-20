@@ -9,13 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Bracket string literal syntax**: Access keys containing special characters using `["key.name"]` or `['key.name']`
+  - Supports keys with dots: `["my.config"]`
+  - Supports keys with brackets: `["items[0]"]`
+  - Supports escaped quotes: `["key\"quote"]`
+  - Works with JSON, dictionaries, and mixed paths
 - **Enhanced type conversion**: Support for `Enum`, `Guid`, and `Nullable<T>` types in `GetValue<T>()`
 - **Smarter JSON number handling**: JSON integers return `int`/`long`, floats return `double` (previously all returned `decimal`)
 - **XML documentation**: Added comprehensive XML docs to `ToExpando()` method
-- **New tests**: 13 additional test cases for bug fixes and improvements (108 total)
+- **New tests**: 24 additional test cases for new features (119 total)
 - **Cache management**: `ClearCaches()` public method for testing and memory management
 - **Cache size limits**: Automatic cache trimming when exceeding 1000 entries to prevent memory leaks
 - **Dictionary reflection caching**: Cached `IDictionary<string, T>` interface info for improved performance
+
+### Changed
+
+- **Path parser**: Replaced simple `Split()` with stateful tokenizer for bracket literal support
 
 ### Fixed
 

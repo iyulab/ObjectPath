@@ -8,8 +8,6 @@ namespace ObjectPathLibrary
 {
     public static class ObjectPath
     {
-        private static readonly char[] Separator = new[] { '.', '[', ']' };
-
         /// <summary>
         /// Maximum number of entries in each cache. When exceeded, oldest entries are removed.
         /// </summary>
@@ -24,7 +22,7 @@ namespace ObjectPathLibrary
             if (obj == null) return null;
             if (string.IsNullOrEmpty(path)) return obj;
 
-            var segments = path.Split(Separator, StringSplitOptions.RemoveEmptyEntries);
+            var segments = ParsePath(path);
             int index = 0;
 
             while (obj != null && index < segments.Length)
@@ -341,6 +339,109 @@ namespace ObjectPathLibrary
                 FieldCache[key] = fieldInfo;
             }
             return fieldInfo;
+        }
+
+        /// <summary>
+        /// Parses a path expression into segments, supporting:
+        /// - Dot notation: "User.Name" → ["User", "Name"]
+        /// - Bracket index: "Items[0]" → ["Items", "0"]
+        /// - Bracket string literals: "Data[\"my.key\"]" or "Data['my.key']" → ["Data", "my.key"]
+        /// </summary>
+        private static string[] ParsePath(string path)
+        {
+            var segments = new List<string>();
+            var current = new System.Text.StringBuilder();
+            int i = 0;
+
+            while (i < path.Length)
+            {
+                char c = path[i];
+
+                if (c == '.')
+                {
+                    // Dot separator - finish current segment
+                    if (current.Length > 0)
+                    {
+                        segments.Add(current.ToString());
+                        current.Clear();
+                    }
+                    i++;
+                }
+                else if (c == '[')
+                {
+                    // Start of bracket expression
+                    if (current.Length > 0)
+                    {
+                        segments.Add(current.ToString());
+                        current.Clear();
+                    }
+                    i++;
+
+                    if (i < path.Length && (path[i] == '"' || path[i] == '\''))
+                    {
+                        // String literal: ["key"] or ['key']
+                        char quote = path[i];
+                        i++;
+                        while (i < path.Length && path[i] != quote)
+                        {
+                            if (path[i] == '\\' && i + 1 < path.Length)
+                            {
+                                // Handle escape sequences
+                                i++;
+                                current.Append(path[i]);
+                            }
+                            else
+                            {
+                                current.Append(path[i]);
+                            }
+                            i++;
+                        }
+                        if (i < path.Length) i++; // Skip closing quote
+                        if (i < path.Length && path[i] == ']') i++; // Skip closing bracket
+
+                        if (current.Length > 0)
+                        {
+                            segments.Add(current.ToString());
+                            current.Clear();
+                        }
+                    }
+                    else
+                    {
+                        // Numeric index: [0]
+                        while (i < path.Length && path[i] != ']')
+                        {
+                            current.Append(path[i]);
+                            i++;
+                        }
+                        if (i < path.Length) i++; // Skip closing bracket
+
+                        if (current.Length > 0)
+                        {
+                            segments.Add(current.ToString());
+                            current.Clear();
+                        }
+                    }
+                }
+                else if (c == ']')
+                {
+                    // Unexpected closing bracket - skip
+                    i++;
+                }
+                else
+                {
+                    // Regular character
+                    current.Append(c);
+                    i++;
+                }
+            }
+
+            // Add final segment
+            if (current.Length > 0)
+            {
+                segments.Add(current.ToString());
+            }
+
+            return segments.ToArray();
         }
 
         private static DictionaryTypeInfo? GetCachedDictionaryTypeInfo(Type type)

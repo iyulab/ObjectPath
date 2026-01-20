@@ -1931,4 +1931,189 @@ namespace ObjectPathLibrary.Tests
     }
 
     #endregion
+
+    #region Path Escape Syntax Tests
+
+    public class BracketStringLiteralTests
+    {
+        [Fact]
+        public void GetValue_DoubleQuoteBracket_AccessesKeyWithDot()
+        {
+            // Arrange
+            var dict = new Dictionary<string, object>
+            {
+                ["my.key"] = "value with dot"
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(dict, "[\"my.key\"]");
+
+            // Assert
+            Assert.Equal("value with dot", result);
+        }
+
+        [Fact]
+        public void GetValue_SingleQuoteBracket_AccessesKeyWithDot()
+        {
+            // Arrange
+            var dict = new Dictionary<string, object>
+            {
+                ["my.key"] = "value with dot"
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(dict, "['my.key']");
+
+            // Assert
+            Assert.Equal("value with dot", result);
+        }
+
+        [Fact]
+        public void GetValue_BracketKey_AccessesKeyWithBrackets()
+        {
+            // Arrange
+            var dict = new Dictionary<string, object>
+            {
+                ["key[0]"] = "value with brackets"
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(dict, "[\"key[0]\"]");
+
+            // Assert
+            Assert.Equal("value with brackets", result);
+        }
+
+        [Fact]
+        public void GetValue_MixedSyntax_WorksCorrectly()
+        {
+            // Arrange
+            var data = new Dictionary<string, object>
+            {
+                ["config.settings"] = new Dictionary<string, object>
+                {
+                    ["value"] = 42
+                }
+            };
+
+            // Act - Access "config.settings" key, then "value" property
+            var result = ObjectPath.GetValue(data, "[\"config.settings\"].value");
+
+            // Assert
+            Assert.Equal(42, result);
+        }
+
+        [Fact]
+        public void GetValue_NestedBracketKeys_WorksCorrectly()
+        {
+            // Arrange
+            var data = new Dictionary<string, object>
+            {
+                ["level.one"] = new Dictionary<string, object>
+                {
+                    ["level.two"] = "nested value"
+                }
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(data, "[\"level.one\"][\"level.two\"]");
+
+            // Assert
+            Assert.Equal("nested value", result);
+        }
+
+        [Fact]
+        public void GetValue_EscapedQuotes_WorksCorrectly()
+        {
+            // Arrange
+            var dict = new Dictionary<string, object>
+            {
+                ["key\"quote"] = "escaped quote value"
+            };
+
+            // Act - Use backslash to escape the quote
+            var result = ObjectPath.GetValue(dict, "[\"key\\\"quote\"]");
+
+            // Assert
+            Assert.Equal("escaped quote value", result);
+        }
+
+        [Fact]
+        public void GetValue_CombinedWithArrayIndex_WorksCorrectly()
+        {
+            // Arrange
+            var data = new Dictionary<string, object>
+            {
+                ["items.list"] = new List<object> { "first", "second", "third" }
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(data, "[\"items.list\"][1]");
+
+            // Assert
+            Assert.Equal("second", result);
+        }
+
+        [Fact]
+        public void GetValue_JsonElement_WithBracketSyntax()
+        {
+            // Arrange
+            var json = """{"data.key": {"nested.prop": "json value"}}""";
+            var doc = JsonDocument.Parse(json);
+
+            // Act
+            var result = ObjectPath.GetValue(doc.RootElement, "[\"data.key\"][\"nested.prop\"]");
+
+            // Assert
+            Assert.Equal("json value", result);
+        }
+
+        [Fact]
+        public void GetValue_RegularObjectAfterBracketKey_WorksCorrectly()
+        {
+            // Arrange
+            var dict = new Dictionary<string, object>
+            {
+                ["my.config"] = new { Name = "Test", Value = 123 }
+            };
+
+            // Act
+            var name = ObjectPath.GetValue(dict, "[\"my.config\"].Name");
+            var value = ObjectPath.GetValue(dict, "[\"my.config\"].Value");
+
+            // Assert
+            Assert.Equal("Test", name);
+            Assert.Equal(123, value);
+        }
+
+        [Fact]
+        public void TryGetValue_WithBracketSyntax_ReturnsTrue()
+        {
+            // Arrange
+            var dict = new Dictionary<string, object> { ["a.b"] = "value" };
+
+            // Act
+            var result = ObjectPath.TryGetValue(dict, "[\"a.b\"]", out var value);
+
+            // Assert
+            Assert.True(result);
+            Assert.Equal("value", value);
+        }
+
+        [Fact]
+        public void TryGetValue_WithInvalidBracketKey_ReturnsFalse()
+        {
+            // Arrange
+            var dict = new Dictionary<string, object> { ["key"] = "value" };
+
+            // Act
+            var result = ObjectPath.TryGetValue(dict, "[\"nonexistent.key\"]", out var value);
+
+            // Assert
+            Assert.False(result);
+            Assert.Null(value);
+        }
+    }
+
+    #endregion
 }
