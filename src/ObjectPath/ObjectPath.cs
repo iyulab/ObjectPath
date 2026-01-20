@@ -10,8 +10,14 @@ namespace ObjectPathLibrary
     {
         private static readonly char[] Separator = new[] { '.', '[', ']' };
 
+        /// <summary>
+        /// Maximum number of entries in each cache. When exceeded, oldest entries are removed.
+        /// </summary>
+        private const int MaxCacheSize = 1000;
+
         private static readonly ConcurrentDictionary<(Type, string, bool), PropertyInfo?> PropertyCache = new();
         private static readonly ConcurrentDictionary<(Type, string, bool), FieldInfo?> FieldCache = new();
+        private static readonly ConcurrentDictionary<Type, DictionaryTypeInfo?> DictionaryTypeCache = new();
 
         public static object? GetValue(object? obj, string path, bool ignoreCase = true)
         {
@@ -261,45 +267,34 @@ namespace ObjectPathLibrary
                 throw new InvalidObjectPathException($"Property '{currentSegment}' not found in path '{fullPath}'.");
             }
             
-            // Handle generic IDictionary<string, T> via reflection
+            // Handle generic IDictionary<string, T> via cached reflection
             var objType = obj.GetType();
-            var dictionaryInterface = objType.GetInterfaces()
-                .FirstOrDefault(i => i.IsGenericType && 
-                                    i.GetGenericTypeDefinition() == typeof(IDictionary<,>) &&
-                                    i.GetGenericArguments()[0] == typeof(string));
-            
-            if (dictionaryInterface != null)
+            var dictTypeInfo = GetCachedDictionaryTypeInfo(objType);
+
+            if (dictTypeInfo != null)
             {
-                // Use reflection to access the dictionary
-                var tryGetValueMethod = dictionaryInterface.GetMethod("TryGetValue");
-                var keysProperty = dictionaryInterface.GetProperty("Keys");
-                var indexer = dictionaryInterface.GetProperty("Item");
-                
-                if (tryGetValueMethod != null && indexer != null)
+                // Try exact key match
+                var parameters = new object?[] { currentSegment, null };
+                var found = (bool)dictTypeInfo.TryGetValueMethod.Invoke(obj, parameters)!;
+                if (found)
                 {
-                    // Try exact key match
-                    var parameters = new object?[] { currentSegment, null };
-                    var found = (bool)tryGetValueMethod.Invoke(obj, parameters)!;
-                    if (found)
+                    return parameters[1];
+                }
+
+                // Try case-insensitive match if enabled
+                if (ignoreCase && dictTypeInfo.KeysProperty != null)
+                {
+                    var keys = (System.Collections.IEnumerable)dictTypeInfo.KeysProperty.GetValue(obj)!;
+                    foreach (string key in keys)
                     {
-                        return parameters[1];
-                    }
-                    
-                    // Try case-insensitive match if enabled
-                    if (ignoreCase && keysProperty != null)
-                    {
-                        var keys = (System.Collections.IEnumerable)keysProperty.GetValue(obj)!;
-                        foreach (string key in keys)
+                        if (string.Equals(key, currentSegment, StringComparison.OrdinalIgnoreCase))
                         {
-                            if (string.Equals(key, currentSegment, StringComparison.OrdinalIgnoreCase))
-                            {
-                                return indexer.GetValue(obj, new object[] { key });
-                            }
+                            return dictTypeInfo.IndexerProperty.GetValue(obj, new object[] { key });
                         }
                     }
-                    
-                    throw new InvalidObjectPathException($"Property '{currentSegment}' not found in path '{fullPath}'.");
                 }
+
+                throw new InvalidObjectPathException($"Property '{currentSegment}' not found in path '{fullPath}'.");
             }
             
             // Handle regular objects (properties and fields)
@@ -323,6 +318,7 @@ namespace ObjectPathLibrary
             var key = (type, propertyName, ignoreCase);
             if (!PropertyCache.TryGetValue(key, out var propertyInfo))
             {
+                TrimCacheIfNeeded(PropertyCache);
                 var flags = ignoreCase
                     ? BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase
                     : BindingFlags.Public | BindingFlags.Instance;
@@ -337,6 +333,7 @@ namespace ObjectPathLibrary
             var key = (type, fieldName, ignoreCase);
             if (!FieldCache.TryGetValue(key, out var fieldInfo))
             {
+                TrimCacheIfNeeded(FieldCache);
                 var flags = ignoreCase
                     ? BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase
                     : BindingFlags.Public | BindingFlags.Instance;
@@ -344,6 +341,34 @@ namespace ObjectPathLibrary
                 FieldCache[key] = fieldInfo;
             }
             return fieldInfo;
+        }
+
+        private static DictionaryTypeInfo? GetCachedDictionaryTypeInfo(Type type)
+        {
+            if (!DictionaryTypeCache.TryGetValue(type, out var typeInfo))
+            {
+                TrimCacheIfNeeded(DictionaryTypeCache);
+
+                var dictionaryInterface = type.GetInterfaces()
+                    .FirstOrDefault(i => i.IsGenericType &&
+                                        i.GetGenericTypeDefinition() == typeof(IDictionary<,>) &&
+                                        i.GetGenericArguments()[0] == typeof(string));
+
+                if (dictionaryInterface != null)
+                {
+                    var tryGetValueMethod = dictionaryInterface.GetMethod("TryGetValue");
+                    var keysProperty = dictionaryInterface.GetProperty("Keys");
+                    var indexer = dictionaryInterface.GetProperty("Item");
+
+                    if (tryGetValueMethod != null && indexer != null)
+                    {
+                        typeInfo = new DictionaryTypeInfo(tryGetValueMethod, keysProperty, indexer);
+                    }
+                }
+
+                DictionaryTypeCache[type] = typeInfo;
+            }
+            return typeInfo;
         }
 
         private static bool TryGetPropertyIgnoreCase(JsonElement jsonElement, string propertyName, out JsonElement jsonProperty)
@@ -410,6 +435,49 @@ namespace ObjectPathLibrary
 
             // Last resort: decimal for very large/precise numbers
             return jsonElement.GetDecimal();
+        }
+
+        /// <summary>
+        /// Trims a cache if it exceeds the maximum size by removing approximately half of the entries.
+        /// </summary>
+        private static void TrimCacheIfNeeded<TKey, TValue>(ConcurrentDictionary<TKey, TValue> cache) where TKey : notnull
+        {
+            if (cache.Count > MaxCacheSize)
+            {
+                // Remove approximately half of the entries to avoid frequent trimming
+                var keysToRemove = cache.Keys.Take(cache.Count / 2).ToList();
+                foreach (var key in keysToRemove)
+                {
+                    cache.TryRemove(key, out _);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Clears all internal caches. Useful for testing or when memory pressure is detected.
+        /// </summary>
+        public static void ClearCaches()
+        {
+            PropertyCache.Clear();
+            FieldCache.Clear();
+            DictionaryTypeCache.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Cached reflection information for dictionary types.
+    /// </summary>
+    internal sealed class DictionaryTypeInfo
+    {
+        public MethodInfo TryGetValueMethod { get; }
+        public PropertyInfo? KeysProperty { get; }
+        public PropertyInfo IndexerProperty { get; }
+
+        public DictionaryTypeInfo(MethodInfo tryGetValueMethod, PropertyInfo? keysProperty, PropertyInfo indexerProperty)
+        {
+            TryGetValueMethod = tryGetValueMethod;
+            KeysProperty = keysProperty;
+            IndexerProperty = indexerProperty;
         }
     }
 }
