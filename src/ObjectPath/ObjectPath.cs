@@ -37,7 +37,15 @@ namespace ObjectPathLibrary
                     }
                     else if (int.TryParse(currentSegment, out var arrayIndex))
                     {
-                        obj = HandleArrayIndex(obj, arrayIndex, path);
+                        // Try dictionary key access first for numeric string keys
+                        if (TryGetDictionaryValue(obj, currentSegment, ignoreCase, out var dictValue))
+                        {
+                            obj = dictValue;
+                        }
+                        else
+                        {
+                            obj = HandleArrayIndex(obj, arrayIndex, path);
+                        }
                     }
                     else
                     {
@@ -207,6 +215,82 @@ namespace ObjectPathLibrary
             {
                 throw new InvalidObjectPathException($"Cannot access '{currentSegment}' on non-object/non-array JSON element in path '{fullPath}'.");
             }
+        }
+
+        /// <summary>
+        /// Attempts to get a value from a dictionary using the specified key.
+        /// Returns true if the object is a dictionary and contains the key.
+        /// </summary>
+        private static bool TryGetDictionaryValue(object obj, string key, bool ignoreCase, out object? value)
+        {
+            // Handle IDictionary<string, object> (most common case, including ExpandoObject)
+            if (obj is IDictionary<string, object> dictStringObject)
+            {
+                if (dictStringObject.TryGetValue(key, out var dictValue) ||
+                    (ignoreCase && TryGetValueIgnoreCase(dictStringObject, key, out dictValue)))
+                {
+                    value = dictValue;
+                    return true;
+                }
+                value = null;
+                return false;
+            }
+
+            // Handle non-generic IDictionary (Hashtable, etc.)
+            if (obj is IDictionary nonGenericDict)
+            {
+                if (nonGenericDict.Contains(key))
+                {
+                    value = nonGenericDict[key];
+                    return true;
+                }
+                if (ignoreCase)
+                {
+                    foreach (var k in nonGenericDict.Keys)
+                    {
+                        if (k is string keyStr && string.Equals(keyStr, key, StringComparison.OrdinalIgnoreCase))
+                        {
+                            value = nonGenericDict[k];
+                            return true;
+                        }
+                    }
+                }
+                value = null;
+                return false;
+            }
+
+            // Handle generic IDictionary<string, T> via cached reflection
+            var objType = obj.GetType();
+            var dictTypeInfo = GetCachedDictionaryTypeInfo(objType);
+
+            if (dictTypeInfo != null)
+            {
+                // Try exact key match
+                var parameters = new object?[] { key, null };
+                var found = (bool)dictTypeInfo.TryGetValueMethod.Invoke(obj, parameters)!;
+                if (found)
+                {
+                    value = parameters[1];
+                    return true;
+                }
+
+                // Try case-insensitive match if enabled
+                if (ignoreCase && dictTypeInfo.KeysProperty != null)
+                {
+                    var keys = (IEnumerable)dictTypeInfo.KeysProperty.GetValue(obj)!;
+                    foreach (string k in keys)
+                    {
+                        if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase))
+                        {
+                            value = dictTypeInfo.IndexerProperty.GetValue(obj, new object[] { k });
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            value = null;
+            return false;
         }
 
         private static object? HandleArrayIndex(object obj, int arrayIndex, string fullPath)

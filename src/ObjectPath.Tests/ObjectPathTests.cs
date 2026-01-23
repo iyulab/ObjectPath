@@ -2116,4 +2116,376 @@ namespace ObjectPathLibrary.Tests
     }
 
     #endregion
+
+    #region Dictionary with Numeric String Keys Tests (GitHub Issue #1)
+
+    public class DictionaryNumericKeyTests
+    {
+        [Fact]
+        public void GetValue_DictionaryStringString_WithNumericKey_ReturnsValue()
+        {
+            // Arrange - Exact case from GitHub issue #1
+            var dict = new Dictionary<string, string>
+            {
+                ["1"] = "hello world"
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(dict, "[1]");
+
+            // Assert
+            Assert.Equal("hello world", result);
+        }
+
+        [Fact]
+        public void GetValue_DictionaryStringObject_WithNumericKey_ReturnsValue()
+        {
+            // Arrange
+            var dict = new Dictionary<string, object>
+            {
+                ["0"] = "zero",
+                ["1"] = "one",
+                ["2"] = "two"
+            };
+
+            // Act & Assert
+            Assert.Equal("zero", ObjectPath.GetValue(dict, "[0]"));
+            Assert.Equal("one", ObjectPath.GetValue(dict, "[1]"));
+            Assert.Equal("two", ObjectPath.GetValue(dict, "[2]"));
+        }
+
+        [Fact]
+        public void GetValue_DictionaryStringInt_WithNumericKey_ReturnsValue()
+        {
+            // Arrange
+            var dict = new Dictionary<string, int>
+            {
+                ["100"] = 999,
+                ["200"] = 888
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(dict, "[100]");
+
+            // Assert
+            Assert.Equal(999, result);
+        }
+
+        [Fact]
+        public void GetValue_Hashtable_WithNumericStringKey_ReturnsValue()
+        {
+            // Arrange
+            var hashtable = new System.Collections.Hashtable
+            {
+                ["1"] = "hashtable value",
+                ["2"] = 42
+            };
+
+            // Act
+            var result1 = ObjectPath.GetValue(hashtable, "[1]");
+            var result2 = ObjectPath.GetValue(hashtable, "[2]");
+
+            // Assert
+            Assert.Equal("hashtable value", result1);
+            Assert.Equal(42, result2);
+        }
+
+        [Fact]
+        public void GetValue_NestedDictionary_WithNumericKeys_ReturnsValue()
+        {
+            // Arrange
+            var dict = new Dictionary<string, object>
+            {
+                ["1"] = new Dictionary<string, object>
+                {
+                    ["2"] = new Dictionary<string, string>
+                    {
+                        ["3"] = "nested value"
+                    }
+                }
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(dict, "[1][2][3]");
+
+            // Assert
+            Assert.Equal("nested value", result);
+        }
+
+        [Fact]
+        public void GetValue_DictionaryWithArrayValue_NumericKeyThenArrayIndex()
+        {
+            // Arrange - Dictionary with numeric key containing an array
+            var dict = new Dictionary<string, object>
+            {
+                ["1"] = new[] { "a", "b", "c" }
+            };
+
+            // Act - Access dictionary key "1", then array index 2
+            var result = ObjectPath.GetValue(dict, "[1][2]");
+
+            // Assert
+            Assert.Equal("c", result);
+        }
+
+        [Fact]
+        public void GetValue_ArrayContainingDictionaryWithNumericKey_WorksCorrectly()
+        {
+            // Arrange - Array containing dictionaries with numeric keys
+            var array = new object[]
+            {
+                new Dictionary<string, string> { ["0"] = "dict0-key0" },
+                new Dictionary<string, string> { ["1"] = "dict1-key1" }
+            };
+
+            // Act - Access array index 0, then dictionary key "0"
+            var result0 = ObjectPath.GetValue(array, "[0][0]");
+            var result1 = ObjectPath.GetValue(array, "[1][1]");
+
+            // Assert
+            Assert.Equal("dict0-key0", result0);
+            Assert.Equal("dict1-key1", result1);
+        }
+
+        [Fact]
+        public void GetValue_DictionaryNumericKey_WithDotNotation_ReturnsNestedValue()
+        {
+            // Arrange
+            var dict = new Dictionary<string, object>
+            {
+                ["1"] = new { Name = "Test", Value = 123 }
+            };
+
+            // Act
+            var name = ObjectPath.GetValue(dict, "[1].Name");
+            var value = ObjectPath.GetValue(dict, "[1].Value");
+
+            // Assert
+            Assert.Equal("Test", name);
+            Assert.Equal(123, value);
+        }
+
+        [Fact]
+        public void GetValue_DictionaryNumericKey_CaseInsensitive_NotApplicable()
+        {
+            // Arrange - Numeric keys are exact match only (case sensitivity doesn't apply)
+            var dict = new Dictionary<string, string>
+            {
+                ["1"] = "value"
+            };
+
+            // Act & Assert - Both ignoreCase true and false should work
+            Assert.Equal("value", ObjectPath.GetValue(dict, "[1]", ignoreCase: true));
+            Assert.Equal("value", ObjectPath.GetValue(dict, "[1]", ignoreCase: false));
+        }
+
+        [Fact]
+        public void TryGetValue_DictionaryNumericKey_ReturnsTrue()
+        {
+            // Arrange
+            var dict = new Dictionary<string, string>
+            {
+                ["1"] = "hello"
+            };
+
+            // Act
+            var result = ObjectPath.TryGetValue(dict, "[1]", out var value);
+
+            // Assert
+            Assert.True(result);
+            Assert.Equal("hello", value);
+        }
+
+        [Fact]
+        public void TryGetValue_DictionaryNumericKey_Generic_ReturnsTrue()
+        {
+            // Arrange
+            var dict = new Dictionary<string, int>
+            {
+                ["42"] = 100
+            };
+
+            // Act
+            var result = ObjectPath.TryGetValue<int>(dict, "[42]", out var value);
+
+            // Assert
+            Assert.True(result);
+            Assert.Equal(100, value);
+        }
+
+        [Fact]
+        public void GetValue_DictionaryNumericKey_KeyNotFound_ThrowsException()
+        {
+            // Arrange
+            var dict = new Dictionary<string, string>
+            {
+                ["1"] = "value"
+            };
+
+            // Act & Assert - Key "99" doesn't exist, and there's no array to index
+            var ex = Assert.Throws<InvalidObjectPathException>(() => ObjectPath.GetValue(dict, "[99]"));
+            Assert.Contains("99", ex.Message);
+        }
+
+        [Fact]
+        public void GetValue_ArrayAccess_StillWorksAfterDictionaryFix()
+        {
+            // Arrange - Ensure regular array access is not broken
+            var obj = new
+            {
+                Items = new[] { "first", "second", "third" }
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(obj, "Items[1]");
+
+            // Assert
+            Assert.Equal("second", result);
+        }
+
+        [Fact]
+        public void GetValue_ListAccess_StillWorksAfterDictionaryFix()
+        {
+            // Arrange - Ensure list access is not broken
+            var obj = new
+            {
+                Numbers = new List<int> { 10, 20, 30, 40, 50 }
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(obj, "Numbers[3]");
+
+            // Assert
+            Assert.Equal(40, result);
+        }
+
+        [Fact]
+        public void GetValue_MixedDictionaryAndArray_ComplexPath()
+        {
+            // Arrange - Complex structure with both dictionaries and arrays
+            var data = new Dictionary<string, object>
+            {
+                ["users"] = new[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["1"] = new { Name = "Alice" }
+                    },
+                    new Dictionary<string, object>
+                    {
+                        ["2"] = new { Name = "Bob" }
+                    }
+                }
+            };
+
+            // Act - users[0] = array index, [1] = dictionary key
+            var alice = ObjectPath.GetValue(data, "users[0][1].Name");
+            var bob = ObjectPath.GetValue(data, "users[1][2].Name");
+
+            // Assert
+            Assert.Equal("Alice", alice);
+            Assert.Equal("Bob", bob);
+        }
+
+        [Fact]
+        public void GetValue_DictionaryNumericKey_VsStringLiteralSyntax_SameResult()
+        {
+            // Arrange
+            var dict = new Dictionary<string, string>
+            {
+                ["1"] = "value"
+            };
+
+            // Act - Both syntaxes should work
+            var resultBracket = ObjectPath.GetValue(dict, "[1]");
+            var resultStringLiteral = ObjectPath.GetValue(dict, "[\"1\"]");
+
+            // Assert
+            Assert.Equal("value", resultBracket);
+            Assert.Equal("value", resultStringLiteral);
+            Assert.Equal(resultBracket, resultStringLiteral);
+        }
+
+        [Fact]
+        public void GetValue_EmptyDictionary_NumericKey_ThrowsException()
+        {
+            // Arrange
+            var dict = new Dictionary<string, string>();
+
+            // Act & Assert
+            Assert.Throws<InvalidObjectPathException>(() => ObjectPath.GetValue(dict, "[0]"));
+        }
+
+        [Fact]
+        public void GetValue_DictionaryWithNegativeNumericKey_ReturnsValue()
+        {
+            // Arrange - Dictionary can have negative number as string key
+            var dict = new Dictionary<string, string>
+            {
+                ["-1"] = "negative one"
+            };
+
+            // Act
+            var result = ObjectPath.GetValue(dict, "[-1]");
+
+            // Assert
+            Assert.Equal("negative one", result);
+        }
+
+        [Fact]
+        public void GetValue_DictionaryWithLeadingZeroKey_ReturnsValue()
+        {
+            // Arrange - Dictionary key "01" is different from "1"
+            var dict = new Dictionary<string, string>
+            {
+                ["01"] = "zero-one",
+                ["1"] = "one"
+            };
+
+            // Act
+            var result01 = ObjectPath.GetValue(dict, "[01]");
+            var result1 = ObjectPath.GetValue(dict, "[1]");
+
+            // Assert - Dictionary lookup uses the exact segment string
+            // "[01]" segment is "01" -> matches key "01"
+            // "[1]" segment is "1" -> matches key "1"
+            Assert.Equal("zero-one", result01);
+            Assert.Equal("one", result1);
+        }
+
+        [Fact]
+        public void GetValueByPath_ExtensionMethod_DictionaryNumericKey_Works()
+        {
+            // Arrange
+            var dict = new Dictionary<string, string>
+            {
+                ["1"] = "extension test"
+            };
+
+            // Act
+            var result = dict.GetValueByPath("[1]");
+
+            // Assert
+            Assert.Equal("extension test", result);
+        }
+
+        [Fact]
+        public void TryGetValueByPath_ExtensionMethod_DictionaryNumericKey_Works()
+        {
+            // Arrange
+            var dict = new Dictionary<string, string>
+            {
+                ["1"] = "extension test"
+            };
+
+            // Act
+            var success = dict.TryGetValueByPath("[1]", out var result);
+
+            // Assert
+            Assert.True(success);
+            Assert.Equal("extension test", result);
+        }
+    }
+
+    #endregion
 }
